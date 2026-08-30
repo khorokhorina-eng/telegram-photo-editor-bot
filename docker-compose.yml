@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: telegram-photo-editor-bot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: telegram_photo_editor_bot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - telegram-photo-editor-bot-postgres:/var/lib/postgresql/data
+
+volumes:
+  telegram-photo-editor-bot-postgres:

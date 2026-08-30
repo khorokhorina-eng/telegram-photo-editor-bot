@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f8f7ff" />
+    <title>Фоторедактор онлайн</title>
+    <link rel="stylesheet" href="./styles.css?v=20260827-mobile-sheet" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="hero">
+        <span class="eyebrow">ФОТОРЕДАКТОР ОНЛАЙН</span>
+        <h1>Ваша фотостудия</h1>
+        <p>Выберите идею, затем пришлите исходное фото в чат. Результат придёт туда же.</p>
+      </header>
+
+      <nav class="filters" aria-label="Категории">
+        <button class="filter active" data-filter="all">Все</button>
+        <button class="filter" data-filter="photoshoot">Фотосессии</button>
+        <button class="filter" data-filter="avatar">Аватарки</button>
+        <button class="filter" data-filter="modest">Скромный стиль</button>
+        <button class="filter" data-filter="men">Мужское</button>
+        <button class="filter" data-filter="tools">Инструменты</button>
+      </nav>
+
+      <p id="tools-note" class="tools-note" hidden>В вариантах с фоном меняется только фон и свет. Лицо, фигура, одежда и поза остаются прежними.</p>
+
+      <section id="gallery" class="gallery" aria-label="Шаблоны"></section>
+      <p class="privacy-note">Фото не загружается в фотостудию: вы отправите его в защищённый чат с ботом после выбора шаблона.</p>
+    </main>
+
+    <dialog id="sheet" class="sheet">
+      <div class="sheet-inner">
+        <button class="close" id="close" aria-label="Закрыть">×</button>
+        <div id="sheet-preview" class="sheet-preview"></div>
+        <div class="sheet-copy">
+          <span id="sheet-category" class="sheet-category"></span>
+          <h2 id="sheet-title"></h2>
+          <p id="sheet-description"></p>
+          <div class="sheet-price" id="sheet-price"></div>
+          <button id="select" class="primary">Выбрать и загрузить фото</button>
+          <button id="select-last" class="secondary">Использовать последнее фото</button>
+          <p id="sheet-status" class="sheet-status" role="status" hidden></p>
+        </div>
+      </div>
+    </dialog>
+    <div id="toast" class="toast" role="status"></div>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script type="module" src="./app.js?v=20260828-chat-fallback"></script>
+  </body>
+</html>

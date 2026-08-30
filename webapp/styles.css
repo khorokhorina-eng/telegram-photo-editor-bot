@@ -1,0 +1,44 @@
+:root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f8f7ff; color: #191625; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: radial-gradient(circle at 92% 0%, #eadfff 0, transparent 28rem), #f8f7ff; }
+button { font: inherit; }
+.app { width: min(100%, 760px); margin: 0 auto; padding: max(22px, env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom)); }
+.hero { padding: 10px 4px 22px; }
+.eyebrow, .sheet-category { color: #7054bb; font-size: 11px; font-weight: 800; letter-spacing: .11em; text-transform: uppercase; }
+h1 { margin: 8px 0 8px; font-size: clamp(30px, 9vw, 44px); line-height: 1; letter-spacing: -.045em; }
+.hero p { max-width: 510px; margin: 0; color: #625d6d; font-size: 16px; line-height: 1.4; }
+.filters { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 17px; scrollbar-width: none; }
+.tools-note { margin: -6px 2px 17px; padding: 11px 12px; border: 1px solid #e1d8f6; border-radius: 14px; background: #f1ecff; color: #5d4b89; font-size: 13px; line-height: 1.35; }
+.filter { white-space: nowrap; border: 1px solid #e1ddec; border-radius: 999px; padding: 9px 13px; background: #fff; color: #615b70; font-weight: 650; cursor: pointer; }
+.filter.active { background: #211641; border-color: #211641; color: #fff; }
+.gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.card { overflow: hidden; padding: 0; text-align: left; border: 1px solid #e7e3ee; border-radius: 19px; background: #fff; box-shadow: 0 5px 16px rgba(45, 30, 80, .045); cursor: pointer; transition: transform .18s ease, box-shadow .18s ease; }
+.card:active { transform: scale(.98); }
+.image, .sheet-preview { background-image: var(--template-image); background-size: cover; background-position: center 25%; background-repeat: no-repeat; }
+.image { aspect-ratio: 1 / 1.1; position: relative; }
+.image span { position: absolute; left: 9px; bottom: 9px; padding: 5px 7px; border-radius: 999px; background: rgba(255,255,255,.82); color: #282132; font-size: 10px; font-weight: 750; }
+.card-copy { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 11px 11px 12px; }
+.card strong { font-size: 14px; line-height: 1.15; }
+.card small { flex: 0 0 auto; color: #7358b8; font-size: 11px; font-weight: 700; }
+.privacy-note { margin: 20px 5px 0; color: #817b8a; font-size: 12px; line-height: 1.4; }
+.sheet { width: min(100% - 24px, 560px); padding: 0; border: 0; border-radius: 26px; background: #fff; box-shadow: 0 24px 90px rgba(16, 8, 31, .3); }
+.sheet::backdrop { background: rgba(20, 13, 32, .45); backdrop-filter: blur(4px); }
+.sheet-inner { position: relative; display: grid; grid-template-columns: 42% 1fr; min-height: 260px; }
+.sheet-preview { border-radius: 26px 0 0 26px; min-height: 260px; }
+.sheet-copy { display: flex; flex-direction: column; align-items: flex-start; padding: 28px 22px 21px; }
+.sheet h2 { margin: 8px 0 8px; font-size: 25px; letter-spacing: -.03em; }
+.sheet p { margin: 0; color: #65606f; line-height: 1.4; font-size: 14px; }
+.sheet-price { margin-top: auto; padding: 14px 0; font-weight: 750; }
+.primary { width: 100%; border: 0; border-radius: 13px; padding: 13px 10px; color: #fff; background: #7053bd; font-weight: 750; cursor: pointer; }
+.secondary { width: 100%; margin-top: 8px; border: 1px solid #ded7eb; border-radius: 13px; padding: 11px 10px; color: #51466a; background: #fff; font-weight: 700; cursor: pointer; }
+.sheet-status { width: 100%; margin: 10px 0 0; color: #5a467e; font-size: 13px; line-height: 1.35; text-align: center; }
+.sheet-status.error { color: #a43c57; }
+.primary:disabled, .secondary:disabled { cursor: wait; opacity: .72; }
+.close { position: absolute; z-index: 1; top: 10px; right: 10px; width: 32px; height: 32px; border: 0; border-radius: 50%; background: rgba(255,255,255,.88); font-size: 24px; line-height: 1; cursor: pointer; }
+.toast { position: fixed; left: 50%; bottom: 24px; width: max-content; max-width: calc(100% - 32px); transform: translate(-50%, 20px); padding: 11px 14px; border-radius: 13px; background: #211641; color: #fff; font-size: 13px; opacity: 0; pointer-events: none; transition: .2s ease; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+@media (min-width: 620px) { .gallery { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Telegram reports different viewport widths on phones depending on device,
+   display scaling and the app version. Keep the readable vertical card on all
+   touch devices; the side-by-side version is reserved for desktop. */
+@media (max-width: 680px), (pointer: coarse) { .sheet-inner { grid-template-columns: 1fr; } .sheet-preview { min-height: 170px; border-radius: 26px 26px 0 0; } .sheet-copy { min-height: 250px; } }
