@@ -305,6 +305,7 @@ export class JobWorker {
       const message = String(error?.message || error);
       const isOpenAiBalanceExhausted = message.includes("credit_balance_exhausted") || message.includes("insufficient_quota");
       const isUnreadableHeic = message.includes("Security limit exceeded") || message.includes("corrupt header: heif");
+      const isOpenAiSafetyBlocked = message.includes("moderation_blocked") || message.includes("safety_violations");
       await this.store.refundConsumedEdit(job.user_id, job.entitlement_source, job.paid_cost);
       await this.store.failJob(job.id, message);
       if (job.template_action) {
@@ -320,6 +321,8 @@ export class JobWorker {
           ? `Сервис обработки временно недоступен. Попытка возвращена — повторно ничего не спишется.\n\nПопробуйте немного позже.${savedTemplateText}`
           : isUnreadableHeic
             ? `Не удалось прочитать этот файл: некоторые оригиналы HEIC содержат служебные слои, которые сервис не поддерживает. Попытка возвращена.\n\nОтправьте это фото как обычное фото из галереи или экспортируйте его в JPEG — качество останется высоким.${savedTemplateText}`
+            : isOpenAiSafetyBlocked
+              ? `Не удалось обработать фото: OpenAI не принимает такие изображения или запросы по правилам безопасности.\n\nПопробуйте выбрать другое фото или упростить запрос — например, без откровенного контента, обнажённости или сексуализированных деталей. Попытка возвращена, ничего не списалось.${savedTemplateText}`
             : `Не удалось обработать фото. Попытка возвращена.\n\nПопробуйте другое фото или более простой запрос.${savedTemplateText}`
       );
       await this.store.log("error", "worker", "Failed job", {
