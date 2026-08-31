@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { BOT_MESSAGE_DEFAULTS } from "./messages.js";
 import { bottomMenuKeyboard, cardPackKeyboard, creditPackKeyboard, paymentMethodKeyboard, avatarStyleKeyboard, backgroundKeyboard, mainActionKeyboard, confirmEditKeyboard, legalKeyboard, photoshootKeyboard, referralKeyboard, welcomeKeyboard } from "./keyboards.js";
 import {
   AVATAR_STYLES,
@@ -195,6 +196,14 @@ export class PhotoEditorBot {
 
   async getAdminSnapshot(days = 30) {
     return this.store.getAdminSnapshot(25, config.estimatedOpenAiCostUsd, config.netUsdPerStar, days, config.testUserIds);
+  }
+
+  async getBotMessages() {
+    return this.store.getBotMessages(BOT_MESSAGE_DEFAULTS);
+  }
+
+  async updateBotMessages(messages) {
+    return this.store.updateBotMessages(messages, BOT_MESSAGE_DEFAULTS);
   }
 
   async startBroadcast(text) {
@@ -932,7 +941,7 @@ export class PhotoEditorBot {
       void this.analytics.track(userId, "card_purchase_selected", { pack_key: packKey, rubles: Number(packKey.slice(4)), credits: pack.credits });
       await this.telegram.sendMessage(
         chatId,
-        "Оплата картой и СБП появится здесь после подключения ЮKassa. Сейчас можно пополнить баланс через Telegram Stars.",
+        (await this.store.getBotMessages(BOT_MESSAGE_DEFAULTS)).card_payment_unavailable,
         paymentMethodKeyboard()
       );
     }

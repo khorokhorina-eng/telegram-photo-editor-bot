@@ -168,6 +168,48 @@ export class DatabaseStore {
         finished_at timestamptz
       );
     `);
+
+    await this.pool.query(`
+      create table if not exists bot_messages (
+        key text primary key,
+        text text not null,
+        updated_at timestamptz not null default now()
+      );
+    `);
+  }
+
+  async getBotMessages(defaults) {
+    const { rows } = await this.pool.query(
+      `select key, text from bot_messages where key = any($1::text[])`,
+      [Object.keys(defaults)]
+    );
+    return { ...defaults, ...Object.fromEntries(rows.map((row) => [row.key, row.text])) };
+  }
+
+  async updateBotMessages(messages, defaults) {
+    const entries = Object.entries(messages)
+      .filter(([key]) => Object.hasOwn(defaults, key))
+      .map(([key, text]) => [key, String(text || "").trim()]);
+    if (entries.some(([, text]) => !text || text.length > 4000)) {
+      throw new Error("Каждое сообщение должно содержать от 1 до 4000 символов.");
+    }
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      for (const [key, text] of entries) {
+        await client.query(
+          `insert into bot_messages(key, text) values ($1, $2)
+           on conflict (key) do update set text = excluded.text, updated_at = now()`,
+          [key, text]
+        );
+      }
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async close() {

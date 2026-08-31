@@ -1,4 +1,5 @@
 import { bottomMenuKeyboard, resultKeyboard } from "./keyboards.js";
+import { BOT_MESSAGE_DEFAULTS } from "./messages.js";
 import sharp from "sharp";
 
 function sleep(ms) {
@@ -306,6 +307,7 @@ export class JobWorker {
       const isOpenAiBalanceExhausted = message.includes("credit_balance_exhausted") || message.includes("insufficient_quota");
       const isUnreadableHeic = message.includes("Security limit exceeded") || message.includes("corrupt header: heif");
       const isOpenAiSafetyBlocked = message.includes("moderation_blocked") || message.includes("safety_violations");
+      const botMessages = await this.store.getBotMessages(BOT_MESSAGE_DEFAULTS);
       await this.store.refundConsumedEdit(job.user_id, job.entitlement_source, job.paid_cost);
       await this.store.failJob(job.id, message);
       if (job.template_action) {
@@ -322,8 +324,8 @@ export class JobWorker {
           : isUnreadableHeic
             ? `Не удалось прочитать этот файл: некоторые оригиналы HEIC содержат служебные слои, которые сервис не поддерживает. Попытка возвращена.\n\nОтправьте это фото как обычное фото из галереи или экспортируйте его в JPEG — качество останется высоким.${savedTemplateText}`
             : isOpenAiSafetyBlocked
-              ? `Не удалось обработать фото: OpenAI не принимает такие изображения или запросы по правилам безопасности.\n\nПопробуйте выбрать другое фото или упростить запрос — например, без откровенного контента, обнажённости или сексуализированных деталей. Попытка возвращена, ничего не списалось.${savedTemplateText}`
-            : `Не удалось обработать фото. Попытка возвращена.\n\nПопробуйте другое фото или более простой запрос.${savedTemplateText}`
+              ? `${botMessages.openai_safety_blocked}${savedTemplateText}`
+            : `${botMessages.processing_error}${savedTemplateText}`
       );
       await this.store.log("error", "worker", "Failed job", {
         jobId: job.id,

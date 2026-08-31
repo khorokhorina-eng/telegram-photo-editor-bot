@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import http from "node:http";
 import { URL } from "node:url";
+import { BOT_MESSAGE_LABELS } from "./messages.js";
 
 function escapeHtml(value) {
   return String(value)
@@ -178,6 +179,7 @@ function renderDashboard(snapshot) {
   </head>
   <body>
     <h1>Панель управления фотоботом</h1>
+    <p><a class="period" href="/admin/texts?token=__TOKEN__">✏️ Тексты бота</a></p>
     <div class="periods">${periodLinks}</div>
     <p class="hint">Аналитика ${escapeHtml(period)}. События в этой таблице сохраняются в базе бота; исторические данные начнут накапливаться после обновления.</p>
     <h2>Общая активность</h2>
@@ -268,6 +270,29 @@ function renderDashboard(snapshot) {
     </table></div>
   </body>
 </html>`;
+}
+
+function renderTextEditor(messages, token, saved = false) {
+  const fields = Object.entries(BOT_MESSAGE_LABELS).map(([key, label]) => `
+    <section class="message">
+      <label for="${escapeHtml(key)}"><strong>${escapeHtml(label)}</strong></label>
+      <textarea id="${escapeHtml(key)}" name="${escapeHtml(key)}" maxlength="4000" required>${escapeHtml(messages[key] || "")}</textarea>
+    </section>
+  `).join("");
+  return `<!doctype html>
+<html lang="ru"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Тексты бота</title><style>
+body { font-family:sans-serif; max-width:900px; margin:24px auto; padding:0 16px; background:#f7f7fb; color:#1f2937; }
+.message, form { background:white; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin:16px 0; }
+textarea { display:block; width:100%; min-height:150px; margin-top:8px; box-sizing:border-box; padding:10px; font:inherit; }
+button, a { font:inherit; padding:10px 14px; border-radius:8px; } button { background:#2563eb; color:white; border:0; cursor:pointer; } a { display:inline-block; text-decoration:none; color:#1d4ed8; } .ok { color:#166534; background:#dcfce7; padding:12px; border-radius:8px; }
+</style></head><body>
+<p><a href="/admin?token=${encodeURIComponent(token)}">← К статистике</a></p>
+<h1>Тексты бота</h1>
+<p>Меняйте сообщения и нажимайте «Сохранить». Новая версия применяется к следующим сообщениям бота сразу, без перезапуска.</p>
+${saved ? '<p class="ok">Изменения сохранены.</p>' : ""}
+<form method="post" action="/admin/texts?token=${encodeURIComponent(token)}">${fields}<button type="submit">Сохранить изменения</button></form>
+</body></html>`;
 }
 
 function readBody(req) {
@@ -362,6 +387,33 @@ export function createAdminAndWebhookServer({ port, adminToken, telegramBotToken
         const snapshot = await bot.getAdminSnapshot(days);
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(renderDashboard(snapshot).replaceAll("__TOKEN__", encodeURIComponent(url.searchParams.get("token") || "")));
+        return;
+      }
+
+      if (req.method === "GET" && url.pathname === "/admin/texts") {
+        if (adminToken && url.searchParams.get("token") !== adminToken) {
+          res.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+          res.end("Unauthorized");
+          return;
+        }
+        const messages = await bot.getBotMessages();
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(renderTextEditor(messages, url.searchParams.get("token") || "", url.searchParams.get("saved") === "1"));
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/admin/texts") {
+        if (adminToken && url.searchParams.get("token") !== adminToken) {
+          res.writeHead(401, { "content-type": "text/plain; charset=utf-8" });
+          res.end("Unauthorized");
+          return;
+        }
+        const form = new URLSearchParams((await readBody(req)).toString("utf8"));
+        const messages = Object.fromEntries(Object.keys(BOT_MESSAGE_LABELS).map((key) => [key, form.get(key) || ""]));
+        await bot.updateBotMessages(messages);
+        const token = encodeURIComponent(url.searchParams.get("token") || "");
+        res.writeHead(303, { location: `/admin/texts?token=${token}&saved=1` });
+        res.end();
         return;
       }
 
