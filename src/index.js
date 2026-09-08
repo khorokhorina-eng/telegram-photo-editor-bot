@@ -6,6 +6,7 @@ import { DatabaseStore } from "./store.js";
 import { TelegramClient } from "./telegram.js";
 import { JobWorker } from "./worker.js";
 import { Analytics } from "./analytics.js";
+import { YooKassaClient } from "./yookassa.js";
 
 async function main() {
   const store = new DatabaseStore({
@@ -51,8 +52,16 @@ async function main() {
     telegram,
     store,
     imageService,
-    analytics
+    analytics,
+    yookassa: new YooKassaClient({ shopId: config.yookassaShopId, secretKey: config.yookassaSecretKey, returnUrl: config.yookassaReturnUrl, receiptEmail: config.yookassaReceiptEmail, receiptVatCode: config.yookassaReceiptVatCode })
   });
+  if (bot.yookassa.enabled) {
+    console.log("[bot] card payments enabled");
+    setInterval(() => void bot.reconcilePendingCardPayments(), config.yookassaPollIntervalMs).unref();
+    void bot.reconcilePendingCardPayments();
+  } else {
+    console.log("[bot] card payments disabled");
+  }
 
   const worker = new JobWorker({
     store,

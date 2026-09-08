@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import http from "node:http";
 import { URL } from "node:url";
 import { BOT_MESSAGE_LABELS } from "./messages.js";
+import { isYooKassaWebhookIp } from "./yookassa.js";
 
 function escapeHtml(value) {
   return String(value)
@@ -212,6 +213,7 @@ function renderDashboard(snapshot) {
       <div class="card"><strong>Пользователи / обработали фото</strong><div>${escapeHtml(stats.users_count)} / ${escapeHtml(stats.users_with_edits)}</div></div>
       <div class="card"><strong>Платящие / покупки</strong><div>${escapeHtml(stats.paying_users)} / ${escapeHtml(stats.purchases_count)}</div></div>
       <div class="card"><strong>Выручка</strong><div>${escapeHtml(stats.revenue_stars)} Stars</div><small>За 7 дней: ${escapeHtml(stats.revenue_stars_7d)} Stars</small></div>
+      <div class="card"><strong>Выручка карта / СБП</strong><div>${escapeHtml(stats.revenue_rub)} ₽</div><small>За 7 дней: ${escapeHtml(stats.revenue_rub_7d)} ₽</small></div>
       <div class="card"><strong>Готово / ошибки</strong><div>${escapeHtml(stats.completed_jobs)} / ${escapeHtml(stats.failed_jobs)}</div></div>
       <div class="card"><strong>Жалобы / возвраты</strong><div>${escapeHtml(stats.poor_results)} / ${escapeHtml(stats.refunded_results)}</div></div>
       <div class="card"><strong>Estimated OpenAI cost</strong><div>$${escapeHtml(Number(stats.estimated_openai_cost_usd).toFixed(2))}</div><small>$${escapeHtml(Number(stats.estimated_openai_cost_usd / Math.max(1, stats.completed_jobs)).toFixed(3))} per completed edit</small></div>
@@ -336,6 +338,20 @@ export function createAdminAndWebhookServer({ port, adminToken, telegramBotToken
         const body = await readBody(req);
         const update = JSON.parse(body.toString("utf8"));
         await bot.handleUpdate(update);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+
+      if (req.method === "POST" && url.pathname === "/yookassa/webhook") {
+        const sourceIp = String(req.headers["x-real-ip"] || req.socket.remoteAddress || "").split(",")[0].trim();
+        if (!isYooKassaWebhookIp(sourceIp)) {
+          res.writeHead(403, { "content-type": "application/json" });
+          res.end(JSON.stringify({ ok: false }));
+          return;
+        }
+        const payload = JSON.parse((await readBody(req)).toString("utf8"));
+        await bot.handleYooKassaWebhook(payload);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ ok: true }));
         return;

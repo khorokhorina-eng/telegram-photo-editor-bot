@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { BOT_MESSAGE_DEFAULTS } from "./messages.js";
-import { bottomMenuKeyboard, cardPackKeyboard, creditPackKeyboard, paymentMethodKeyboard, avatarStyleKeyboard, backgroundKeyboard, mainActionKeyboard, confirmEditKeyboard, legalKeyboard, photoshootKeyboard, referralKeyboard, welcomeKeyboard } from "./keyboards.js";
+import { bottomMenuKeyboard, cardPackKeyboard, cardPaymentKeyboard, creditPackKeyboard, paymentMethodKeyboard, avatarStyleKeyboard, backgroundKeyboard, mainActionKeyboard, confirmEditKeyboard, legalKeyboard, photoshootKeyboard, referralKeyboard, welcomeKeyboard } from "./keyboards.js";
 import {
   AVATAR_STYLES,
   BACKGROUND_OPTIONS,
@@ -79,6 +79,10 @@ function formatBalance(balance) {
   return lines.join("\n");
 }
 
+function fillPaymentText(template, values) {
+  return String(template).replace(/\{(credits|rubles|balance)\}/g, (_, key) => String(values[key] ?? ""));
+}
+
 function helpText() {
   return [
     "В «Фотостудии» выбирайте шаблоны: аватарки, фотосессии, фон и ретушь. Затем отправьте исходное фото в этот чат.",
@@ -152,7 +156,7 @@ function termsText() {
     "1. Бот @gpt_photoeditor_bot предоставляет инструменты ИИ-обработки изображений.",
     "2. Пользователь подтверждает, что имеет право загружать фото и использовать полученный результат.",
     "3. Результаты создаются ИИ и могут отличаться от ожиданий. Бот не гарантирует точное сохранение всех деталей изображения.",
-    "4. Для цифровых услуг внутри Telegram оплата производится в Telegram Stars. Кредиты зачисляются после подтверждённой оплаты.",
+    "4. Для цифровых услуг доступны Telegram Stars и ЮKassa (карта / СБП). Кредиты зачисляются после подтверждённой оплаты.",
     "5. Нельзя использовать бот для нарушения прав третьих лиц, закона или правил Telegram и OpenAI.",
     "6. Условия могут обновляться; актуальная версия доступна по команде /terms."
   ].join("\n");
@@ -166,7 +170,7 @@ function privacyText() {
     "1. Бот обрабатывает Telegram ID, технические данные чата, баланс генераций, историю задач и оценки результата — чтобы предоставить услугу и предотвратить злоупотребления.",
     "2. Исходные файлы фото не сохраняются на сервере бота. Для обработки фото передаётся в Telegram и API OpenAI; бот сохраняет только технический идентификатор последнего фото, чтобы вы могли повторно применить действие.",
     "3. В аналитике используются обезличенные технические события: открытия бота, нажатия кнопок, обработки и покупки. Фото, Telegram ID и текст запросов в Google Analytics не передаются.",
-    "4. Оплата обрабатывается Telegram Stars. Бот не получает данные банковских карт.",
+    "4. Оплата обрабатывается Telegram Stars или ЮKassa (карта / СБП). Бот не получает данные банковских карт.",
     "5. Продолжая пользоваться ботом, вы соглашаетесь с этой политикой."
   ].join("\n");
 }
@@ -185,13 +189,52 @@ function makeCaption(source, cost) {
 }
 
 export class PhotoEditorBot {
-  constructor({ telegram, store, imageService, analytics }) {
+  constructor({ telegram, store, imageService, analytics, yookassa = null }) {
     this.telegram = telegram;
     this.store = store;
     this.imageService = imageService;
     this.analytics = analytics;
+    this.yookassa = yookassa;
     this.offset = 0;
     this.broadcastRunning = false;
+  }
+
+  async reconcileCardPayment(yookassaPaymentId, { notify = true } = {}) {
+    const local = await this.store.getCardPaymentById(yookassaPaymentId);
+    if (!local || !this.yookassa?.enabled) return { state: "not_found" };
+    const remote = await this.yookassa.getPayment(yookassaPaymentId);
+    if (remote.status === "succeeded") {
+      const result = await this.store.creditCardPayment(yookassaPaymentId);
+      if (result.credited) {
+        await this.store.log("info", "yookassa", "Card payment credited", { paymentId: yookassaPaymentId, userId: local.user_id, credits: local.credits });
+        void this.analytics.track(local.user_id, "purchase_completed", { method: "card_sbp", pack_key: local.pack_key, rubles: local.amount_rub, credits: local.credits });
+        if (notify) await this.sendCardPaymentSuccess(result.payment, result.balance);
+      }
+      return { state: "succeeded", ...result };
+    }
+    await this.store.updateCardPaymentStatus(yookassaPaymentId, remote.status || "pending");
+    return { state: remote.status || "pending", payment: local };
+  }
+
+  async sendCardPaymentSuccess(payment, balance) {
+    const messages = await this.store.getBotMessages(BOT_MESSAGE_DEFAULTS);
+    const user = await this.store.getUser(payment.user_id);
+    await this.telegram.sendMessage(payment.chat_id, fillPaymentText(messages.card_payment_success, { credits: payment.credits, balance }), user.lastPhoto?.fileId ? mainActionKeyboard() : welcomeKeyboard());
+  }
+
+  async reconcilePendingCardPayments() {
+    if (!this.yookassa?.enabled) return;
+    const pending = await this.store.getPendingCardPayments(config.yookassaPendingMaxAgeMinutes);
+    for (const payment of pending) {
+      try { await this.reconcileCardPayment(payment.yookassa_payment_id); }
+      catch (error) { await this.store.log("error", "yookassa", "Card payment reconciliation failed", { paymentId: payment.yookassa_payment_id, error: error.message }); }
+    }
+  }
+
+  async handleYooKassaWebhook(payload) {
+    const paymentId = payload?.object?.id;
+    if (!paymentId || !["payment.succeeded", "payment.canceled"].includes(payload?.event)) return;
+    await this.reconcileCardPayment(paymentId);
   }
 
   async getAdminSnapshot(days = 30) {
@@ -285,6 +328,18 @@ export class PhotoEditorBot {
 
     const startMatch = /^\/start(?:\s+(\S+))?$/.exec(message.text || "");
     if (startMatch) {
+      if (startMatch[1] === "paid") {
+        const pending = await this.store.getPendingCardPayments(config.yookassaPendingMaxAgeMinutes, 0);
+        let completed = false;
+        for (const payment of pending.filter((item) => Number(item.user_id) === userId)) {
+          try {
+            const result = await this.reconcileCardPayment(payment.yookassa_payment_id);
+            completed ||= result.state === "succeeded";
+          } catch (error) { console.error("[yookassa] return reconciliation failed", error.message); }
+        }
+        if (!completed) await this.telegram.sendMessage(chatId, "Проверяю оплату. Если она уже подтверждена, генерации зачислятся в течение минуты.");
+        return;
+      }
       if (startMatch[1]?.startsWith("studio_")) {
         let action = "";
         const useNewPhoto = startMatch[1].startsWith("studio_new_");
@@ -932,18 +987,50 @@ export class PhotoEditorBot {
     }
 
     if (data.startsWith("card:")) {
+      if (data.startsWith("card:check:")) {
+        const paymentId = data.slice("card:check:".length);
+        const payment = await this.store.getCardPaymentForUser(paymentId, userId);
+        if (!payment) {
+          await this.telegram.sendMessage(chatId, "Платёж не найден.");
+          return;
+        }
+        const result = await this.reconcileCardPayment(paymentId);
+        if (result.state === "succeeded") {
+          if (!result.credited) await this.telegram.sendMessage(chatId, "✅ Этот платёж уже зачислен.");
+          return;
+        }
+        const messages = await this.store.getBotMessages(BOT_MESSAGE_DEFAULTS);
+        if (["canceled", "expired"].includes(result.state)) {
+          await this.telegram.sendMessage(chatId, messages.card_payment_canceled, cardPackKeyboard());
+        } else {
+          await this.telegram.sendMessage(chatId, messages.card_payment_pending, cardPaymentKeyboard(payment.confirmation_url, paymentId, payment.amount_rub));
+        }
+        return;
+      }
       const packKey = data.slice("card:".length);
       const pack = config.packs[packKey];
       if (!pack) {
         await this.telegram.sendMessage(chatId, "Неизвестный пакет.");
         return;
       }
-      void this.analytics.track(userId, "card_purchase_selected", { pack_key: packKey, rubles: Number(packKey.slice(4)), credits: pack.credits });
-      await this.telegram.sendMessage(
-        chatId,
-        (await this.store.getBotMessages(BOT_MESSAGE_DEFAULTS)).card_payment_unavailable,
-        paymentMethodKeyboard()
-      );
+      if (!this.yookassa?.enabled) {
+        await this.telegram.sendMessage(chatId, (await this.store.getBotMessages(BOT_MESSAGE_DEFAULTS)).card_payment_unavailable, paymentMethodKeyboard());
+        return;
+      }
+      try {
+        const remote = await this.yookassa.createPayment({ telegramUserId: userId, packKey, credits: pack.credits, rubles: pack.rubles });
+        const confirmationUrl = remote?.confirmation?.confirmation_url;
+        if (!remote?.id || !confirmationUrl) throw new Error("YooKassa did not return a confirmation URL");
+        await this.store.createCardPayment({ yookassaPaymentId: remote.id, userId, chatId, packKey, credits: pack.credits, amountRub: pack.rubles, status: remote.status || "pending", confirmationUrl });
+        await this.store.log("info", "yookassa", "Card payment created", { paymentId: remote.id, userId, packKey, rubles: pack.rubles });
+        void this.analytics.track(userId, "purchase_started", { method: "card_sbp", pack_key: packKey, rubles: pack.rubles, credits: pack.credits });
+        const messages = await this.store.getBotMessages(BOT_MESSAGE_DEFAULTS);
+        await this.telegram.sendMessage(chatId, fillPaymentText(messages.card_payment_link, { credits: pack.credits, rubles: pack.rubles }), cardPaymentKeyboard(confirmationUrl, remote.id, pack.rubles));
+      } catch (error) {
+        await this.store.log("error", "yookassa", "Card payment creation failed", { userId, packKey, error: error.message });
+        console.error("[yookassa] create payment failed", error.message);
+        await this.telegram.sendMessage(chatId, "Не удалось создать платёж. Попробуйте ещё раз через минуту или пополните баланс через Telegram Stars.", paymentMethodKeyboard());
+      }
     }
   }
 

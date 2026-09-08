@@ -114,13 +114,21 @@ export function paymentMethodKeyboard() {
 }
 
 export function cardPackKeyboard() {
+  const order = ["pack149", "pack299", "pack690", "pack990", "pack1900"];
+  const rows = order.map((key) => {
+    const pack = config.packs[key];
+    const each = (pack.rubles / pack.credits).toFixed(1).replace(/\.0$/, "");
+    return [{ text: `${pack.rubles} ₽ → ${pack.credits} генераций (${each} ₽/ген)`, callback_data: `card:${key}` }];
+  });
+  rows.push([{ text: "↩️ Назад", callback_data: "payment:methods" }]);
+  return inlineKeyboard(rows);
+}
+
+export function cardPaymentKeyboard(confirmationUrl, paymentId, rubles) {
   return inlineKeyboard([
-    [{ text: "149 ₽ → 30 генераций (5 ₽/ген)", callback_data: "card:pack149" }],
-    [{ text: "299 ₽ → 65 генераций (4.6 ₽/ген)", callback_data: "card:pack299" }],
-    [{ text: "690 ₽ → 170 генераций (4.1 ₽/ген)", callback_data: "card:pack690" }],
-    [{ text: "990 ₽ → 270 генераций (3.7 ₽/ген)", callback_data: "card:pack990" }],
-    [{ text: "1900 ₽ → 540 генераций (3.5 ₽/ген)", callback_data: "card:pack1900" }],
-    [{ text: "↩️ Назад", callback_data: "payment:methods" }]
+    [{ text: `💳 Оплатить ${rubles} ₽`, url: confirmationUrl }],
+    [{ text: "🔄 Проверить оплату", callback_data: `card:check:${paymentId}` }],
+    [{ text: "↩️ Назад", callback_data: "payment:card" }]
   ]);
 }
 

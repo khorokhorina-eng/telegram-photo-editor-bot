@@ -52,6 +52,25 @@ export class DatabaseStore {
     `);
 
     await this.pool.query(`
+      create table if not exists card_payments (
+        id bigserial primary key,
+        yookassa_payment_id text not null unique,
+        user_id bigint not null references users(user_id) on delete cascade,
+        chat_id bigint not null,
+        pack_key text not null,
+        credits integer not null,
+        amount_rub integer not null,
+        status text not null,
+        confirmation_url text,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        credited_at timestamptz
+      );
+    `);
+    await this.pool.query(`create index if not exists card_payments_pending_idx on card_payments(status, created_at) where credited_at is null;`);
+    await this.pool.query(`create index if not exists card_payments_user_created_idx on card_payments(user_id, created_at desc);`);
+
+    await this.pool.query(`
       create table if not exists jobs (
         id bigserial primary key,
         user_id bigint not null references users(user_id) on delete cascade,
@@ -696,6 +715,86 @@ export class DatabaseStore {
     }
   }
 
+  async createCardPayment({ yookassaPaymentId, userId, chatId, packKey, credits, amountRub, status, confirmationUrl }) {
+    await this.ensureUser(userId);
+    const { rows } = await this.pool.query(
+      `insert into card_payments(yookassa_payment_id, user_id, chat_id, pack_key, credits, amount_rub, status, confirmation_url)
+       values ($1,$2,$3,$4,$5,$6,$7,$8)
+       on conflict (yookassa_payment_id) do update set updated_at = now()
+       returning *`,
+      [yookassaPaymentId, userId, chatId, packKey, credits, amountRub, status, confirmationUrl || null]
+    );
+    return rows[0];
+  }
+
+  async getCardPaymentForUser(yookassaPaymentId, userId) {
+    const { rows } = await this.pool.query(
+      `select * from card_payments where yookassa_payment_id = $1 and user_id = $2`,
+      [yookassaPaymentId, userId]
+    );
+    return rows[0] || null;
+  }
+
+  async getCardPaymentById(yookassaPaymentId) {
+    const { rows } = await this.pool.query(`select * from card_payments where yookassa_payment_id = $1`, [yookassaPaymentId]);
+    return rows[0] || null;
+  }
+
+  async getPendingCardPayments(maxAgeMinutes, minAgeSeconds = 20) {
+    const { rows } = await this.pool.query(
+      `select * from card_payments
+       where credited_at is null and status in ('pending', 'waiting_for_capture')
+         and created_at >= now() - ($1 * interval '1 minute')
+         and created_at <= now() - ($2 * interval '1 second')
+       order by created_at asc`,
+      [maxAgeMinutes, minAgeSeconds]
+    );
+    return rows;
+  }
+
+  async updateCardPaymentStatus(yookassaPaymentId, status) {
+    const { rows } = await this.pool.query(
+      `update card_payments set status = $2, updated_at = now() where yookassa_payment_id = $1 returning *`,
+      [yookassaPaymentId, status]
+    );
+    return rows[0] || null;
+  }
+
+  async creditCardPayment(yookassaPaymentId) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const { rows: paymentRows } = await client.query(
+        `select * from card_payments where yookassa_payment_id = $1 for update`, [yookassaPaymentId]
+      );
+      const payment = paymentRows[0];
+      if (!payment) throw new Error("Card payment not found");
+      if (payment.credited_at) {
+        await client.query("commit");
+        return { payment, credited: false, balance: null };
+      }
+      const { rows: balanceRows } = await client.query(
+        `update users set paid_credits = paid_credits + $2, updated_at = now() where user_id = $1 returning paid_credits`,
+        [payment.user_id, payment.credits]
+      );
+      await client.query(
+        `update card_payments set status = 'succeeded', credited_at = now(), updated_at = now() where id = $1`, [payment.id]
+      );
+      await client.query(
+        `insert into payments(user_id, credits, pack_key, currency, total_amount, type, reason)
+         values ($1,$2,$3,'RUB',$4,'purchase','yookassa')`,
+        [payment.user_id, payment.credits, payment.pack_key, payment.amount_rub]
+      );
+      await client.query("commit");
+      return { payment, credited: true, balance: Number(balanceRows[0].paid_credits) };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async enqueueJob({ userId, chatId, actionKey, paidCost, prompt, sourceType, originalFileId, originalMimeType, entitlementSource, resultLabel = null, templateAction = null }) {
     await this.ensureUser(userId);
     const { rows } = await this.pool.query(
@@ -858,8 +957,10 @@ export class DatabaseStore {
           (select count(distinct user_id) from jobs) as users_with_edits,
           (select count(distinct user_id) from payments where type = 'purchase') as paying_users,
           (select count(*) from payments where type = 'purchase') as purchases_count,
-          (select coalesce(sum(total_amount), 0) from payments where type = 'purchase') as revenue_stars,
-          (select coalesce(sum(total_amount), 0) from payments where type = 'purchase' and created_at >= now() - interval '7 days') as revenue_stars_7d,
+          (select coalesce(sum(total_amount), 0) from payments where type = 'purchase' and currency = 'XTR') as revenue_stars,
+          (select coalesce(sum(total_amount), 0) from payments where type = 'purchase' and currency = 'XTR' and created_at >= now() - interval '7 days') as revenue_stars_7d,
+          (select coalesce(sum(total_amount), 0) from payments where type = 'purchase' and currency = 'RUB') as revenue_rub,
+          (select coalesce(sum(total_amount), 0) from payments where type = 'purchase' and currency = 'RUB' and created_at >= now() - interval '7 days') as revenue_rub_7d,
           (select count(*) from jobs where feedback like 'bad:%') as poor_results,
           (select count(*) from jobs where refund_granted) as refunded_results
       `),

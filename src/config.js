@@ -74,12 +74,19 @@ export const config = {
   starterFreeEdits: 3,
   dailyFreeEdits: 1,
   packs: {
-    pack149: { credits: 30, stars: toInt(process.env.PACK_149_STARS, 149) },
-    pack299: { credits: 65, stars: toInt(process.env.PACK_299_STARS, 299) },
-    pack690: { credits: 170, stars: toInt(process.env.PACK_690_STARS, 690) },
-    pack990: { credits: 270, stars: toInt(process.env.PACK_990_STARS, 990) },
-    pack1900: { credits: 540, stars: toInt(process.env.PACK_1900_STARS, 1900) }
+    pack149: { credits: 30, stars: toInt(process.env.PACK_149_STARS, 149), rubles: toInt(process.env.PACK_149_RUB, 149) },
+    pack299: { credits: 65, stars: toInt(process.env.PACK_299_STARS, 299), rubles: toInt(process.env.PACK_299_RUB, 299) },
+    pack690: { credits: 170, stars: toInt(process.env.PACK_690_STARS, 690), rubles: toInt(process.env.PACK_690_RUB, 690) },
+    pack990: { credits: 270, stars: toInt(process.env.PACK_990_STARS, 990), rubles: toInt(process.env.PACK_990_RUB, 990) },
+    pack1900: { credits: 540, stars: toInt(process.env.PACK_1900_STARS, 1900), rubles: toInt(process.env.PACK_1900_RUB, 1900) }
   },
+  yookassaShopId: process.env.YOOKASSA_SHOP_ID || "",
+  yookassaSecretKey: process.env.YOOKASSA_SECRET_KEY || "",
+  yookassaReturnUrl: process.env.YOOKASSA_RETURN_URL || "https://t.me/gpt_photoeditor_bot?start=paid",
+  yookassaReceiptEmail: process.env.YOOKASSA_RECEIPT_EMAIL || "",
+  yookassaReceiptVatCode: toInt(process.env.YOOKASSA_RECEIPT_VAT_CODE, 1),
+  yookassaPollIntervalMs: toInt(process.env.YOOKASSA_POLL_INTERVAL_MS, 30000),
+  yookassaPendingMaxAgeMinutes: toInt(process.env.YOOKASSA_PENDING_MAX_AGE_MINUTES, 120),
   actionCosts: {
     // One paid credit equals one completed generation in every mode.
     enhance: 1,
