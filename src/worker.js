@@ -11,6 +11,51 @@ function isTransientNetworkError(error) {
   return message === "fetch failed" || message.includes("network") || message.includes("timeout");
 }
 
+function getCustomRequest(prompt = "") {
+  const marked = String(prompt).match(/USER REQUEST \(verbatim\): <<<([\s\S]*?)>>>/i);
+  if (marked?.[1]) {
+    return marked[1].trim();
+  }
+  const legacy = String(prompt).match(/following user request:\s*([\s\S]*?)\. Apply requested facial changes/i);
+  return legacy?.[1]?.trim() || "";
+}
+
+function isMaterialCustomRequest(request = "") {
+  return /волос|причес|причёс|уклад|чёлк|окрас|стриж|hair|hairstyl|bang|fringe|background|фон|одежд|плать|костюм|куртк|юбк|макияж|makeup|сцен|сделай.*(?:поз|свет)|outfit|dress|jacket|scene|lighting/i.test(request);
+}
+
+async function measureImageSimilarity(sourceBuffer, resultBuffer) {
+  const toGrayscalePixels = (buffer) => sharp(buffer, { failOn: "none" })
+    .rotate()
+    .resize(64, 64, { fit: "fill" })
+    .removeAlpha()
+    .grayscale()
+    .raw()
+    .toBuffer();
+  const [source, result] = await Promise.all([
+    toGrayscalePixels(sourceBuffer),
+    toGrayscalePixels(resultBuffer)
+  ]);
+  const sourceAverage = source.reduce((total, value) => total + value, 0) / source.length;
+  const resultAverage = result.reduce((total, value) => total + value, 0) / result.length;
+  let hashDifferenceBits = 0;
+  let meanAbsoluteDifference = 0;
+  for (let index = 0; index < source.length; index += 1) {
+    if ((source[index] >= sourceAverage) !== (result[index] >= resultAverage)) {
+      hashDifferenceBits += 1;
+    }
+    meanAbsoluteDifference += Math.abs(source[index] - result[index]);
+  }
+  return {
+    hashDifferenceBits,
+    meanAbsoluteDifference: meanAbsoluteDifference / source.length
+  };
+}
+
+function isNearDuplicate(similarity) {
+  return similarity.hashDifferenceBits <= 180 && similarity.meanAbsoluteDifference <= 9;
+}
+
 // Image models tend to compose a square output tightly when given a vertical
 // close-up. Supplying a smaller, centred source on a transparent square canvas
 // gives the model real room to extend the setting around the person in the same
@@ -204,15 +249,20 @@ export class JobWorker {
       let sourceFilename = preparedOriginal.filename;
       let identityReferenceBuffer = null;
 
-      try {
-        identityReferenceBuffer = await prepareIdentityFaceReference(preparedOriginal.buffer);
-      } catch (error) {
-        // The first image is still a complete source reference. Do not fail a
-        // paid edit merely because an unusual or tiny upload cannot be cropped.
-        await this.store.log("warn", "worker", "Could not prepare identity face reference", {
-          jobId: job.id,
-          error: String(error?.message || error)
-        });
+      // For a free-form request, the full source image is enough to keep identity.
+      // A second face crop also contains hair and styling, which can unintentionally
+      // overpower an explicit request to change those elements.
+      if (job.action_key !== "custom") {
+        try {
+          identityReferenceBuffer = await prepareIdentityFaceReference(preparedOriginal.buffer);
+        } catch (error) {
+          // The first image is still a complete source reference. Do not fail a
+          // paid edit merely because an unusual or tiny upload cannot be cropped.
+          await this.store.log("warn", "worker", "Could not prepare identity face reference", {
+            jobId: job.id,
+            error: String(error?.message || error)
+          });
+        }
       }
 
       if (job.action_key === "avatar") {
@@ -252,6 +302,32 @@ export class JobWorker {
         });
         await sleep(2_000);
         edited = await this.imageService.editImage(editParams);
+      }
+
+      const customRequest = job.action_key === "custom" ? getCustomRequest(job.prompt) : "";
+      if (customRequest && isMaterialCustomRequest(customRequest)) {
+        try {
+          const similarity = await measureImageSimilarity(sourceBuffer, edited.buffer);
+          if (isNearDuplicate(similarity)) {
+            await this.store.log("warn", "worker", "Retrying near-duplicate custom edit", {
+              jobId: job.id,
+              actionKey: job.action_key,
+              similarity
+            });
+            edited = await this.imageService.editImage({
+              ...editParams,
+              identityReferenceBuffer: null,
+              prompt: `${job.prompt}\n\nRETRY REQUIREMENT: the first result was too similar to the source. Apply the user's requested change (${customRequest}) clearly and visibly in this retry. Do not return an almost unchanged copy. Preserve the same person's identity and natural proportions.`
+            });
+          }
+        } catch (error) {
+          // Similarity checking is a quality safeguard, not a reason to fail or
+          // charge the user again for an otherwise successful generation.
+          await this.store.log("warn", "worker", "Could not evaluate custom edit similarity", {
+            jobId: job.id,
+            error: String(error?.message || error)
+          });
+        }
       }
 
       if (job.action_key === "avatar" && job.result_label === "Деловой") {

@@ -562,5 +562,9 @@ export function buildCustomPrompt(userPrompt) {
   const normalizedPrompt = userPrompt
     .replace(/талию\s+тольше/gi, "талию тоньше")
     .replace(/талия\s+тольше/gi, "талия тоньше");
-  return `${UNIVERSAL_IDENTITY_PRIORITY_RULES} ${CUSTOM_REQUEST_IDENTITY_RULES} ${FACIAL_CONTOUR_LOCK_RULES} ${FRESH_NATURAL_FACE_RULES} ${CUSTOM_BODY_EDIT_RULES} Edit this existing image according to the following user request: ${normalizedPrompt}. Apply requested facial changes only when they are explicitly named, and keep every adjustment conservative enough that the original person remains immediately recognisable. ${IDENTITY_PRESERVATION_RULES} ${MULTI_PERSON_AND_SMALL_FACE_RULES} ${CUSTOM_BODY_EDIT_RULES} ${FINAL_SOURCE_FACE_MATCH_RULES} ${SECOND_IDENTITY_REFERENCE_RULES}`;
+  return `USER REQUEST (verbatim): <<<${normalizedPrompt}>>>
+
+Edit the uploaded image to fulfil the user request. The requested change must be clearly visible in the finished image; do not return a near-duplicate of the source. When the request explicitly names hair, clothing, background, lighting, makeup, props, or a scene, change that element as requested.
+
+Keep the same immediately recognisable person: preserve facial structure, age, skin tone, body proportions, pose, camera perspective, and every person in the photo unless the user explicitly requests a change. Do not face-swap, create a different person, distort anatomy, add text, logos, or watermarks. Keep edits natural and realistic.`.replace(/\s+/g, " ").trim();
 }
