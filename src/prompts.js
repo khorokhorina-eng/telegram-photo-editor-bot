@@ -558,6 +558,37 @@ export function buildBackgroundPrompt(optionKey, customPrompt = "") {
   return `${UNIVERSAL_IDENTITY_PRIORITY_RULES} ${option.prompt} ${FRESH_NATURAL_FACE_RULES} ${FACIAL_CONTOUR_LOCK_RULES} ${BACKGROUND_ONLY_RULES} ${FINAL_SOURCE_FACE_MATCH_RULES} ${SECOND_IDENTITY_REFERENCE_RULES}`;
 }
 
+function customIntentInstructions(request) {
+  const rules = [];
+
+  if (/волос|причес|причёс|уклад|чёлк|окрас|стриж|hair|hairstyl|bang|fringe/i.test(request)) {
+    rules.push("HAIR EDIT: make the requested hairstyle, length, colour, texture, or styling clearly visible. Keep the same face, hairline, and person, but do not preserve the old hairstyle when the user asked to change it.");
+  }
+  if (/убер|добав|замен|предмет|объект|remove|add|replace|object/i.test(request)) {
+    rules.push("OBJECT EDIT: add, remove, or replace the explicitly named object cleanly and visibly. Reconstruct the surrounding area naturally, with correct perspective, shadows, reflections, and texture. Do not alter unrelated people or objects.");
+  }
+  if (/фон|задн|локац|пейзаж|background|scene|location/i.test(request)) {
+    rules.push("BACKGROUND EDIT: change the requested background or scene while keeping the foreground person, their identity, pose, scale, and lighting relationship believable. Keep edges, hair, hands, and clothing clean and natural.");
+  }
+  if (/свет|освещ|цвет|ярк|тепл|холод|lighting|colour|color|bright/i.test(request)) {
+    rules.push("LIGHTING OR COLOUR EDIT: make the requested lighting, white balance, colour grading, or brightness visibly apparent across the scene. Preserve natural skin tone and do not reshape the face.");
+  }
+  if (/талия|талию|фигур|тело|поз|ног|рук|плеч|body|waist|pose|arm|leg/i.test(request)) {
+    rules.push("BODY OR POSE EDIT: change only the explicitly named body area or pose, using a small natural-looking adjustment. Preserve identity, overall build, anatomy, clothing fit, hands, and straight background lines.");
+  }
+  if (/одежд|плать|костюм|куртк|пиджак|юбк|рубаш|очки|сумк|outfit|dress|jacket|blazer|shirt|accessor/i.test(request)) {
+    rules.push("WARDROBE EDIT: visibly apply the requested clothing or accessory change. Keep the same person and pose, with realistic fabric, fit, shadows, and body proportions.");
+  }
+  if (/ретуш|кож|прыщ|морщ|синяк|мешк|blemish|skin|wrinkle|acne/i.test(request)) {
+    rules.push("RETOUCH EDIT: make the requested skin or retouch adjustment visible but natural. Preserve skin texture, facial structure, age, and the person's recognisable appearance.");
+  }
+  if (/макияж|помад|ресниц|бров|makeup|lipstick|eyelash/i.test(request)) {
+    rules.push("MAKEUP EDIT: visibly apply the requested makeup while preserving the same face, age, skin tone, and realistic facial features.");
+  }
+
+  return rules.join(" ");
+}
+
 export function buildCustomPrompt(userPrompt) {
   const normalizedPrompt = userPrompt
     .replace(/талию\s+тольше/gi, "талию тоньше")
@@ -566,11 +597,14 @@ export function buildCustomPrompt(userPrompt) {
   const requestedChangeClarification = styledHairRequested
     ? "Interpret \"styled hair\" as a visibly polished salon blowout appropriate to the current length: intentional shape, smooth controlled strands, natural volume and soft defined movement. The hairstyle must look clearly more finished than in the source, not merely have a few flyaways removed."
     : "";
+  const intentInstructions = customIntentInstructions(normalizedPrompt);
   return `USER REQUEST (verbatim): <<<${normalizedPrompt}>>>
 
 Edit the uploaded image to fulfil the user request. The requested change must be clearly visible in the finished image; do not return a near-duplicate of the source. When the request explicitly names hair, clothing, background, lighting, makeup, props, or a scene, change that element as requested.
 
 ${requestedChangeClarification}
+
+${intentInstructions}
 
 Keep the same immediately recognisable person: preserve facial structure, age, skin tone, body proportions, pose, camera perspective, and every person in the photo unless the user explicitly requests a change. Do not face-swap, create a different person, distort anatomy, add text, logos, or watermarks. Keep edits natural and realistic.`.replace(/\s+/g, " ").trim();
 }

@@ -21,7 +21,7 @@ function getCustomRequest(prompt = "") {
 }
 
 function isMaterialCustomRequest(request = "") {
-  return /волос|причес|причёс|уклад|чёлк|окрас|стриж|hair|hairstyl|bang|fringe|background|фон|одежд|плать|костюм|куртк|юбк|макияж|makeup|сцен|сделай.*(?:поз|свет)|outfit|dress|jacket|scene|lighting/i.test(request);
+  return /волос|причес|причёс|уклад|чёлк|окрас|стриж|hair|hairstyl|bang|fringe|background|фон|задн|локац|одежд|плать|костюм|куртк|пиджак|юбк|макияж|ретуш|кож|прыщ|морщ|талия|талию|фигур|тело|поз|убер|добав|замен|предмет|объект|свет|цвет|outfit|dress|jacket|blazer|scene|lighting|makeup|skin|retouch|waist|body|pose|remove|add|replace|object|color|colour/i.test(request);
 }
 
 async function measureImageSimilarity(sourceBuffer, resultBuffer) {
