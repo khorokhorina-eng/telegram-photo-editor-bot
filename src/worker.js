@@ -53,7 +53,10 @@ async function measureImageSimilarity(sourceBuffer, resultBuffer) {
 }
 
 function isNearDuplicate(similarity) {
-  return similarity.hashDifferenceBits <= 180 && similarity.meanAbsoluteDifference <= 9;
+  // Image re-encoding alone creates a small pixel difference. These values were
+  // calibrated against a visually unchanged GPT Image result, while keeping the
+  // retry restricted to requests that ask for a material visible edit.
+  return similarity.hashDifferenceBits <= 320 && similarity.meanAbsoluteDifference <= 9.5;
 }
 
 // Image models tend to compose a square output tightly when given a vertical

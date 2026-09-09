@@ -562,9 +562,15 @@ export function buildCustomPrompt(userPrompt) {
   const normalizedPrompt = userPrompt
     .replace(/талию\s+тольше/gi, "талию тоньше")
     .replace(/талия\s+тольше/gi, "талия тоньше");
+  const styledHairRequested = /уложенн|уложить\s+волос|hair\s*styling|styled\s+hair/i.test(normalizedPrompt);
+  const requestedChangeClarification = styledHairRequested
+    ? "Interpret \"styled hair\" as a visibly polished salon blowout appropriate to the current length: intentional shape, smooth controlled strands, natural volume and soft defined movement. The hairstyle must look clearly more finished than in the source, not merely have a few flyaways removed."
+    : "";
   return `USER REQUEST (verbatim): <<<${normalizedPrompt}>>>
 
 Edit the uploaded image to fulfil the user request. The requested change must be clearly visible in the finished image; do not return a near-duplicate of the source. When the request explicitly names hair, clothing, background, lighting, makeup, props, or a scene, change that element as requested.
+
+${requestedChangeClarification}
 
 Keep the same immediately recognisable person: preserve facial structure, age, skin tone, body proportions, pose, camera perspective, and every person in the photo unless the user explicitly requests a change. Do not face-swap, create a different person, distort anatomy, add text, logos, or watermarks. Keep edits natural and realistic.`.replace(/\s+/g, " ").trim();
 }
