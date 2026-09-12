@@ -604,7 +604,10 @@ export class PhotoEditorBot {
 
       if (awaitingCustomPhoto) {
         await this.store.setPending(userId, "awaiting_custom_prompt");
-        await this.telegram.sendMessage(chatId, "Фото получено. Теперь напишите, что хотите изменить.");
+        await this.telegram.sendMessage(
+          chatId,
+          "✅ Фото загружено. Теперь опишите, что нужно изменить.\n\nЧем конкретнее запрос, тем точнее результат. Например: «сделай волосы объёмнее», «убери банку с газона» или «измени цвет пиджака»."
+        );
         return;
       }
 
@@ -891,11 +894,17 @@ export class PhotoEditorBot {
       const user = await this.store.getUser(userId);
       if (!user.lastPhoto?.fileId) {
         await this.store.setPending(userId, "awaiting_custom_photo");
-        await this.telegram.sendMessage(chatId, "📷 Сначала отправьте фото. Можно сразу добавить подпись с тем, что нужно изменить.");
+        await this.telegram.sendMessage(
+          chatId,
+          "📷 Загрузите фото, которое хотите изменить.\n\nПосле загрузки опишите словами, что нужно изменить. Чем конкретнее запрос, тем точнее результат.\n\nНапример: «сделай волосы объёмнее», «убери банку с газона» или «измени цвет пиджака»."
+        );
         return;
       }
       await this.store.setPending(userId, "awaiting_custom_prompt");
-      await this.telegram.sendMessage(chatId, "Напишите, что изменить на загруженном фото. Для нового стиля, фотосессии или аватарки это даст более точное сходство.");
+      await this.telegram.sendMessage(
+        chatId,
+        "Опишите, что изменить на этом фото. Чем конкретнее запрос, тем точнее результат.\n\nНапример: «сделай волосы объёмнее», «убери фон» или «измени цвет платья»."
+      );
       return;
     }
 
